@@ -9,18 +9,19 @@ from torchvision import datasets, models, transforms
 import time
 import os
 import copy
+import pdb
 print("PyTorch Version: ", torch.__version__)
 print("Torchvision Version: ", torchvision.__version__)
 
 # Top level data directory. Here we assume the format of the directory conforms
 #   to the ImageFolder structure
-data_dir = "./hymenoptera_data"
+data_dir = "./NEW_DATASET"
 
 # Models to choose from [resnet, alexnet, vgg, squeezenet, densenet, inception]
 model_name = "densenet"
 
 # Number of classes in the dataset
-num_classes = 2
+num_classes = 7
 
 # Batch size for training (change depending on how much memory you have)
 batch_size = 8
@@ -62,7 +63,7 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, is_ince
                     for i in range(10):
                         inp = inputs.clone()[:, i]
                         inp = inp.to(device)
-                        labels = inp.to(device)
+                        labels = labels.to(device)
 
                         # zero the parameter gradients
                         optimizer.zero_grad()
@@ -150,7 +151,7 @@ def initialize_model(model_name, num_classes, feature_extract, use_pretrained=Tr
         num_ftrs = model_ft.classifier.in_features
         model_ft.classifier = nn.Linear(num_ftrs, num_classes)
         input_size = 224
-    else model_name == "resnet":
+    elif model_name == "resnet":
         """ Resnet
         """
         model_ft = models.resnet152(pretrained=use_pretrained)
@@ -168,17 +169,17 @@ model_ft, input_size = initialize_model(model_name, num_classes, feature_extract
 # Print the model we just instantiated
 print(model_ft)
 
+normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 # Data augmentation and normalization for training
 # Just normalization for validation
 data_transforms = {
     'train': transforms.Compose([
-        transforms.RandomResizedCrop(input_size),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+        transforms.Resize(256),
+        transforms.TenCrop(input_size),
+        transforms.Lambda(lambda crops: torch.stack([normalize(transforms.ToTensor()(crop)) for crop in crops]))
     ]),
     'val': transforms.Compose([
-        transforms.Resize(input_size),
+        transforms.Resize(256),
         transforms.CenterCrop(input_size),
         transforms.ToTensor(),
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
