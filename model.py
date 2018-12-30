@@ -57,42 +57,58 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, is_ince
 
             # Iterate over data.
             for inputs, labels in dataloaders[phase]:
-                inputs = inputs.to(device)
-                labels = labels.to(device)
+                # Tencrop loop if train
+                if phase == 'train':
+                    for i in range(10):
+                        inp = inputs.clone()[:, i]
+                        inp = inp.to(device)
+                        labels = inp.to(device)
 
-                # zero the parameter gradients
-                optimizer.zero_grad()
+                        # zero the parameter gradients
+                        optimizer.zero_grad()
 
-                # forward
-                # track history if only in train
-                with torch.set_grad_enabled(phase == 'train'):
-                    # Get model outputs and calculate loss
-                    # Special case for inception because in training it has an auxiliary output. In train
-                    #   mode we calculate the loss by summing the final output and the auxiliary output
-                    #   but in testing we only consider the final output.
-                    if is_inception and phase == 'train':
-                        # From https://discuss.pytorch.org/t/how-to-optimize-inception-model-with-auxiliary-classifiers/7958
-                        outputs, aux_outputs = model(inputs)
-                        loss1 = criterion(outputs, labels)
-                        loss2 = criterion(aux_outputs, labels)
-                        loss = loss1 + 0.4*loss2
-                    else:
+                        # forward
+                        # track history if only in train
+                        with torch.set_grad_enabled(phase == 'train'):
+                            outputs = model(inp)
+                            loss = criterion(outputs, labels)
+
+                            _, preds = torch.max(outputs, 1)
+
+                            # backward + optimize only if in training phase
+                            loss.backward()
+                            optimizer.step()
+
+                        running_loss += loss.item() * inp.size(0)
+                        running_corrects += torch.sum(preds == labels.data)
+
+                    epoch_loss = running_loss / len(dataloaders[phase].dataset) / 10
+                    epoch_acc = running_corrects.double() / len(dataloaders[phase].dataset) / 10
+                else:
+                    inputs = inputs.to(device)
+                    labels = labels.to(device)
+
+                    # zero the parameter gradients
+                    optimizer.zero_grad()
+
+                    # forward
+                    # track history if only in train
+                    with torch.set_grad_enabled(phase == 'train'):
                         outputs = model(inputs)
                         loss = criterion(outputs, labels)
 
-                    _, preds = torch.max(outputs, 1)
+                        _, preds = torch.max(outputs, 1)
 
-                    # backward + optimize only if in training phase
-                    if phase == 'train':
+                        # backward + optimize only if in training phase
                         loss.backward()
                         optimizer.step()
 
-                # statistics
-                running_loss += loss.item() * inputs.size(0)
-                running_corrects += torch.sum(preds == labels.data)
+                    # statistics
+                    running_loss += loss.item() * inputs.size(0)
+                    running_corrects += torch.sum(preds == labels.data)
 
-            epoch_loss = running_loss / len(dataloaders[phase].dataset)
-            epoch_acc = running_corrects.double() / len(dataloaders[phase].dataset)
+                    epoch_loss = running_loss / len(dataloaders[phase].dataset)
+                    epoch_acc = running_corrects.double() / len(dataloaders[phase].dataset)
 
             print('{} Loss: {:.4f} Acc: {:.4f}'.format(phase, epoch_loss, epoch_acc))
 
@@ -133,6 +149,14 @@ def initialize_model(model_name, num_classes, feature_extract, use_pretrained=Tr
         set_parameter_requires_grad(model_ft, feature_extract)
         num_ftrs = model_ft.classifier.in_features
         model_ft.classifier = nn.Linear(num_ftrs, num_classes)
+        input_size = 224
+    else model_name == "resnet":
+        """ Resnet
+        """
+        model_ft = models.resnet152(pretrained=use_pretrained)
+        set_parameter_requires_grad(model_ft, feature_extract)
+        num_ftrs = model_ft.fc.in_features
+        model_ft.fc = nn.Linear(num_ftrs, num_classes)
         input_size = 224
 
     return model_ft, input_size
