@@ -24,10 +24,10 @@ model_name = "densenet"
 num_classes = 7
 
 # Batch size for training (change depending on how much memory you have)
-batch_size = 8
+batch_size = 16
 
 # Number of epochs to train for
-num_epochs = 15
+num_epochs = 30	
 
 # Flag for feature extracting. When False, we finetune the whole model,
 #   when True we only update the reshaped layer params
@@ -75,7 +75,6 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, is_ince
                             loss = criterion(outputs, labels)
 
                             _, preds = torch.max(outputs, 1)
-
                             # backward + optimize only if in training phase
                             loss.backward()
                             optimizer.step()
@@ -99,10 +98,6 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, is_ince
                         loss = criterion(outputs, labels)
 
                         _, preds = torch.max(outputs, 1)
-
-                        # backward + optimize only if in training phase
-                        loss.backward()
-                        optimizer.step()
 
                     # statistics
                     running_loss += loss.item() * inputs.size(0)
