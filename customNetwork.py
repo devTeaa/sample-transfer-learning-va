@@ -45,17 +45,19 @@ class Net(nn.Module):
         return x
 
 net = Net()
+net.cuda()
 
 # Loss and optimization function
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
 
 # Start training
-for epoch in range(2):  # loop over the dataset multiple times
+for epoch in range(1):  # loop over the dataset multiple times
     running_loss = 0.0
     for i, data in enumerate(trainloader, 0):
         # get the inputs
         inputs, labels = data
+        inputs, labels = inputs.cuda(), labels.cuda()
 
         # zero the parameter gradients
         optimizer.zero_grad()
@@ -75,13 +77,12 @@ for epoch in range(2):  # loop over the dataset multiple times
 
 print('Finished Training')
 
-outputs = net(images)
-
 correct = 0
 total = 0
 with torch.no_grad():
     for data in testloader:
         images, labels = data
+        images, labels = images.cuda(), labels.cuda()
         outputs = net(images)
         _, predicted = torch.max(outputs.data, 1)
         total += labels.size(0)
