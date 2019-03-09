@@ -24,21 +24,26 @@ testloader = torch.utils.data.DataLoader(testset, batch_size=4,
 classes = ('plane', 'car', 'bird', 'cat',
            'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 
+# print('transconv')
+print('conv')
+
 # Initialize Net
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
-        self.conv1 = nn.Conv2d(3, 6, 5)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(6, 16, 5)
-        self.fc1 = nn.Linear(16 * 5 * 5, 120)
+        self.conv1 = nn.Conv2d(3, 6, 3, stride=1, padding=0)
+        self.conv2 = nn.Conv2d(6, 16, 2, stride=1, padding=0)
+        self.pool = nn.MaxPool2d(2, stride=2)
+        self.fc1 = nn.Linear(16 * 7 * 7, 120)
         self.fc2 = nn.Linear(120, 84)
         self.fc3 = nn.Linear(84, 10)
 
     def forward(self, x):
+        # x = self.pool(F.relu(self.transconv1(x)))
+        # x = self.pool(F.relu(self.transconv2(x)))
         x = self.pool(F.relu(self.conv1(x)))
         x = self.pool(F.relu(self.conv2(x)))
-        x = x.view(-1, 16 * 5 * 5)
+        x = x.view(-1, x.size()[1] * x.size()[2] * x.size()[3])
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         x = self.fc3(x)
@@ -52,7 +57,7 @@ criterion = nn.CrossEntropyLoss()
 optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
 
 # Start training
-for epoch in range(1):  # loop over the dataset multiple times
+for epoch in range(3):  # loop over the dataset multiple times
     running_loss = 0.0
     for i, data in enumerate(trainloader, 0):
         # get the inputs
