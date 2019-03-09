@@ -43,10 +43,14 @@ class Net(nn.Module):
     def forward(self, x):
         # x = self.pool(F.relu(self.transconv1(x)))
         # x = self.pool(F.relu(self.transconv2(x)))
-        x = self.pool(F.relu(self.conv1(x)))
-        x = self.pool(F.relu(self.conv2(x)))
-        x = F.relu(self.transconv1(x))
-        x = F.relu(self.transconv2(x))
+        
+        y = self.pool(F.relu(self.conv1(x)))
+        y = self.pool(F.relu(self.conv2(y)))
+        
+        y = F.relu(self.transconv1(y))
+        y = F.relu(self.transconv2(y))
+        x = x * y 
+
         x = self.pool(F.relu(self.conv1(x)))
         x = self.pool(F.relu(self.conv2(x)))
         x = x.view(-1, x.size()[1] * x.size()[2] * x.size()[3])
