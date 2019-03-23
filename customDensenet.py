@@ -4,18 +4,17 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.model_zoo as model_zoo
 from collections import OrderedDict
+import torchvision.utils as vutils
+
+import pdb
 
 __all__ = ['DenseNet', 'densenet121',
            'densenet169', 'densenet201', 'densenet161']
 
 
 model_urls = {
-    'densenet121': 'https://download.pytorch.org/models/densenet121-a639ec97.pth',
-    'densenet169': 'https://download.pytorch.org/models/densenet169-b2777c0a.pth',
-    'densenet201': 'https://download.pytorch.org/models/densenet201-c1103571.pth',
-    'densenet161': 'https://download.pytorch.org/models/densenet161-8d451a50.pth',
+    'densenet121': 'https://download.pytorch.org/models/densenet121-a639ec97.pth'
 }
-
 
 def densenet121(pretrained=False, **kwargs):
     r"""Densenet-121 model from
@@ -25,38 +24,21 @@ def densenet121(pretrained=False, **kwargs):
         pretrained (bool): If True, returns a model pre-trained on ImageNet
     """
 
-    num_layers = 58
-    if num_layers > 42:
-        block_config = (6, 12, 24, num_layers - 42)
-        num_transation_layer = 4
-    elif num_layers > 18:
-        block_config = (6, 12, num_layers - 18)
-        num_transation_layer = 3
-    elif num_layers > 6:
-        block_config = (6, num_layers - 6)
-        num_transation_layer = 2
-    elif num_layers > 0:
-        block_config = (num_layers, 0)
-        num_transation_layer = 1
-
-    model = DenseNet(num_init_features=64, growth_rate=32, block_config=block_config,
+    model = DenseNet(num_init_features=64, growth_rate=32, block_config=(6, 12, 24, 16),
                      **kwargs)
-    # model = DenseNet(num_init_features=64, growth_rate=32, block_config=(6, 12, 24, 16),
-    #                  **kwargs)
     if pretrained:
         # '.'s are no longer allowed in module names, but pervious _DenseLayer
         # has keys 'norm.1', 'relu.1', 'conv.1', 'norm.2', 'relu.2', 'conv.2'.
         # They are also in the checkpoints in model_urls. This pattern is used
         # to find such keys.
         pattern = re.compile(r'^(.*denselayer\d+\.(?:norm|relu|conv))\.((?:[12])\.(?:weight|bias|running_mean|running_var))$')
-        model_pattern = re.compile(r'^(.*denselayer\d+\.(?:norm1|relu1|conv1|norm2|relu2|conv2))\.((?:weight|bias|running_mean|running_var))$')
         origin_model = model_zoo.load_url(model_urls['densenet121'])
 
         for key in list(origin_model.keys()):
             res = pattern.match(key)
             if res:
                 new_key = res.group(1) + res.group(2)
-                origin_model[new_key] = origin_model[key]
+                origin_model[new_key[9:]] = origin_model[key]
                 del origin_model[key]
 
         model_dict = model.state_dict()
@@ -109,6 +91,11 @@ class _Transition(nn.Sequential):
                                           kernel_size=1, stride=1, bias=False))
         self.add_module('pool', nn.AvgPool2d(kernel_size=2, stride=2))
 
+def interpolate(x, multiplier=2, divider=2, absolute_channel = 0, mode='nearest'):
+    return F.interpolate(x.view(1, x.size()[0], x.size()[1], x.size()[2], x.size()[3]),
+                            size=(x.size()[1] // divider if absolute_channel == 0 else absolute_channel, x.size()[2] * multiplier, x.size()[3] * multiplier),
+                            mode=mode)[0]
+
 
 class DenseNet(nn.Module):
     r"""Densenet-BC model class, based on
@@ -138,29 +125,81 @@ class DenseNet(nn.Module):
             ('pool0', nn.MaxPool2d(kernel_size=3, stride=2, padding=1)),
         ]))
 
-        # Each denseblock
         num_features = num_init_features
-        for i, num_layers in enumerate(block_config):
-            if (num_layers != 0):
-                block = _DenseBlock(num_layers=num_layers, num_input_features=num_features,
-                                    bn_size=bn_size, growth_rate=growth_rate, drop_rate=drop_rate)
-                self.features.add_module('denseblock%d' % (i + 1), block)
-                num_features = num_features + num_layers * growth_rate
-                if i != len(block_config) - 1:
-                    trans = _Transition(
-                        num_input_features=num_features, num_output_features=num_features // 2)
-                    self.features.add_module('transition%d' % (i + 1), trans)
-                    num_features = num_features // 2
 
-        # Final batch norm
-        self.features.add_module('norm5', nn.BatchNorm2d(num_features))
+        # Block 1
+        num_layers = 6
+        self.denseblock1 = _DenseBlock(num_layers=num_layers, num_input_features=num_features,
+                                  bn_size=bn_size, growth_rate=growth_rate, drop_rate=drop_rate)
+        num_features = num_features + num_layers * growth_rate
+        self.transition1 = _Transition(num_input_features=num_features, num_output_features=num_features // 2)
+        num_features = num_features // 2
+        
+        # Block 2
+        num_layers = 12
+        self.denseblock2 = _DenseBlock(num_layers=num_layers, num_input_features=num_features,
+                                  bn_size=bn_size, growth_rate=growth_rate, drop_rate=drop_rate)
+        num_features = num_features + num_layers * growth_rate
+        self.transition2 = _Transition(num_input_features=num_features, num_output_features=num_features // 2)
+        num_features = num_features // 2
+ 
+        # Block 3
+        num_layers = 24
+        self.denseblock3 = _DenseBlock(num_layers=num_layers, num_input_features=num_features,
+                                  bn_size=bn_size, growth_rate=growth_rate, drop_rate=drop_rate)
+        num_features = num_features + num_layers * growth_rate
+        self.transition3 = _Transition(num_input_features=num_features, num_output_features=num_features // 2)
+        num_features = num_features // 2
+        
+        # Block 4
+        num_layers = 16
+        self.denseblock4 = _DenseBlock(num_layers=num_layers, num_input_features=num_features,
+                                  bn_size=bn_size, growth_rate=growth_rate, drop_rate=drop_rate)
+        num_features = num_features + num_layers * growth_rate
+ 
+        self.conv2d1x1fp4 = nn.Conv2d(1024, 1024, 1, stride=1, padding=0)
+        self.conv2d1x1fp3 = nn.Conv2d(1024, 1024, 1, stride=1, padding=0)
+        self.conv2d1x1fp2 = nn.Conv2d(512, 512, 1, stride=1, padding=0)
+        self.conv2d1x1fp1 = nn.Conv2d(256, 256, 1, stride=1, padding=0)
+      
+        # BatchNorm5 
+        self.batchNorm5 = nn.BatchNorm2d(num_features)
+        
+        # # Each denseblock
+        # num_features = num_init_features
+        # for i, num_layers in enumerate(block_config):
+            # if (num_layers != 0):
+                # block = _DenseBlock(num_layers=num_layers, num_input_features=num_features,
+                                    # bn_size=bn_size, growth_rate=growth_rate, drop_rate=drop_rate)
+                # self.features.add_module('denseblock%d' % (i + 1), block)
+                # num_features = num_features + num_layers * growth_rate
+                # if i != len(block_config) - 1:
+                    # trans = _Transition(
+                        # num_input_features=num_features, num_output_features=num_features // 2)
+                    # self.features.add_module('transition%d' % (i + 1), trans)
+                    # num_features = num_features // 2
 
-        self.valinear1 = nn.Linear(1024 * 7 * 7, 120)
-        self.valinear1 = nn.Linear(120, 84)
-        self.valinear3 = nn.Linear(84, 25)
+        # # Final batch norm
+        # self.features.add_module('norm5', nn.BatchNorm2d(num_features))
+
+        # # 7
+        # self.transconv1 = nn.ConvTranspose2d(1024, 512, 4, stride=2, padding=1)
+        # # 14
+        # self.transconv2 = nn.ConvTranspose2d(512, 256, 4, stride=2, padding=1)
+        # # 28
+        # self.transconv3 = nn.ConvTranspose2d(256, 128, 4, stride=2, padding=1)
+        # # 56
+        # self.transconv4 = nn.ConvTranspose2d(128, 64, 4, stride=2, padding=1)
+        # # 112
+        # self.transconv5 = nn.ConvTranspose2d(64, 3, 4, stride=2, padding=1)
+        # # 224
 
         # Linear layer
         self.classifier = nn.Linear(num_features, num_classes)
+
+        # # Visual attention layer (output 1 x 7 x 7)
+        # self.valinear = nn.Linear(1024 * 7 * 7, 49)
+        # self.valinear = nn.Conv2d(1024, 1, 3, 1, 1)
 
         # Official init from torch repo.
         for m in self.modules():
@@ -172,19 +211,40 @@ class DenseNet(nn.Module):
             elif isinstance(m, nn.Linear):
                 nn.init.constant_(m.bias, 0)
 
-    def forward(self, x):
-        features = self.features(x)
+    def forward(self, x, epoch = -1):
+        # Block 1
+        f1 = self.denseblock1(self.features(x))
 
-        va = features.view(-1, 1024 * 7 * 7)
-        va = F.relu(self.valinear1(va))
-        va = F.relu(self.valinear1(va))
-        va = self.valinear3(va)
-        va = va[0].view(-1, 7)
+        # Block 2
+        f2 = self.denseblock2(self.transition1(f1))
 
-        out = features * va
+        # Block 3
+        f3 = self.denseblock3(self.transition2(f2))
 
-        out = F.relu(out, inplace=True)
-        out = F.avg_pool2d(out, kernel_size=7, stride=1).view(
-            features.size(0), -1)
-        out = self.classifier(out)
-        return out
+        # Block 4
+        f4 = self.denseblock4(self.transition3(f3))
+
+        # Feature Pyramid
+        fp3 = interpolate(f4, divider=1) + self.conv2d1x1fp3(f3)
+        fp2 = interpolate(f3) + self.conv2d1x1fp2(f2)
+        fp1 = interpolate(f2) + self.conv2d1x1fp1(f1)
+
+        x = x + interpolate(fp1, multiplier = 4, absolute_channel = 3)
+
+        # =============================================================
+        # Phase 2 normal Densenet Sequence
+        x = self.features(x)
+        x = self.denseblock1(x)
+        x = self.denseblock2(self.transition1(x))
+        x = self.denseblock3(self.transition2(x))
+        x = self.denseblock4(self.transition3(x))
+        x = self.batchNorm5(x)
+
+        # if epoch != -1:
+        #     writer.add_image('Image', vutils.make_grid(x, normalize=True, scale_each=True), epoch)
+
+        x = F.relu(x, inplace=True)
+        x = F.avg_pool2d(x, kernel_size=7, stride=1).view(x.size(0), -1)
+
+        x = self.classifier(x)
+        return x
