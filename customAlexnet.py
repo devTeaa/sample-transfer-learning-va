@@ -14,21 +14,21 @@ class AlexNet(nn.Module):
 
     def __init__(self, num_classes=1000):
         super(AlexNet, self).__init__()
-        # self.features = nn.Sequential(
-        #     nn.Conv2d(3, 64, kernel_size=11, stride=4, padding=2),
-        #     nn.ReLU(inplace=True),
-        #     nn.MaxPool2d(kernel_size=3, stride=2),
-        #     nn.Conv2d(64, 192, kernel_size=5, padding=2),
-        #     nn.ReLU(inplace=True),
-        #     nn.MaxPool2d(kernel_size=3, stride=2),
-        #     nn.Conv2d(192, 384, kernel_size=3, padding=1),
-        #     nn.ReLU(inplace=True),
-        #     nn.Conv2d(384, 256, kernel_size=3, padding=1),
-        #     nn.ReLU(inplace=True),
-        #     nn.Conv2d(256, 256, kernel_size=3, padding=1),
-        #     nn.ReLU(inplace=True),
-        #     nn.MaxPool2d(kernel_size=3, stride=2),
-        # )
+        self.features = nn.Sequential(
+            nn.Conv2d(3, 64, kernel_size=11, stride=4, padding=2),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=3, stride=2),
+            nn.Conv2d(64, 192, kernel_size=5, padding=2),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=3, stride=2),
+            nn.Conv2d(192, 384, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(384, 256, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(256, 256, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=3, stride=2),
+        )
 
         self.conv2d_0 = nn.Conv2d(3, 64, kernel_size=11, stride=4, padding=2)
         self.conv2d_3 = nn.Conv2d(64, 192, kernel_size=5, padding=2)
@@ -83,7 +83,7 @@ class AlexNet(nn.Module):
 
     def forward(self, x):
         # old alexnet
-        # x = self.features(x)
+        old_features = self.features(x)
         # ==========================================
 
         # manual alexnet
@@ -105,6 +105,11 @@ class AlexNet(nn.Module):
         features = self.relu(features)
         features = self.maxpool2d(features)
         # ===========================================
+
+        if (old_features != features):
+            print('Same')
+        else:
+            print('Not Same')
         
         # # vanilla visual attention
         # va = self.valinear(features.view(-1, 256 * 6 * 6))
@@ -169,15 +174,9 @@ def alexnet(pretrained=False, **kwargs):
                 origin_model['conv2d_' + conv2d_res.group(2)] = origin_model[key]
             elif classifier_res:
                 origin_model[classifier_res.group()] = origin_model[key]
-            del origin_model[key] 
 
         model_dict = model.state_dict()
         # 1. filter out unnecessary keys
-        for k, v in origin_model.items():
-            print(k)
-            if k in model_dict:
-                print(k)
-
         origin_model = {k: v for k, v in origin_model.items() if k in model_dict}
         # 2. overwrite entries in the existing state dict
         model_dict.update(origin_model)
